@@ -20,8 +20,8 @@ services:
       DB_NAME: "directus_db"
       WEBSOCKETS_ENABLED: "true"
       CORS_ENABLED: "true"
-      CORS_ORIGIN: "http://localhost:3000"
-      CORS_METHODS: "GET,POST,PATCH,DELETE"
+      CORS_ORIGIN: "http://nuxt:3000,http://localhost:3000"
+      CORS_METHODS: "GET,POST,PUT,PATCH,DELETE,OPTIONS"
       CORS_ALLOWED_HEADERS: "Content-Type,Authorization"
       CORS_EXPOSED_HEADERS: "Content-Range"
       CORS_CREDENTIALS: "true"
@@ -64,9 +64,6 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./python-service:/app
-    environment:
-      DIRECTUS_API_URL: "http://directus:8055"
-      DIRECTUS_API_TOKEN: "hxbQOJyLffUqoDIzsbWnth8E1hvRTBWu"
     command: /bin/sh -c "pip install -r requirements.txt && cron -f"
     depends_on:
       - directus
