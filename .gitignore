@@ -1,0 +1,5 @@
+frontend
+uploads/*
+node_modules/
+**/node_modules/
+**/__pycache__/%

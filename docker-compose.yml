@@ -1,0 +1,81 @@
+services:
+  directus:
+    image: directus/directus:11.2.2
+    ports:
+      - 8055:8055
+    volumes:
+      - ./database:/directus/database
+      - ./uploads:/directus/uploads
+      - ./extensions:/directus/extensions
+    environment:
+      ACCESS_TOKEN_TTL: "30d"
+      SECRET: "replace-with-secure-random-value"
+      ADMIN_EMAIL: "yvzyldrm@gmail.com"
+      ADMIN_PASSWORD: "blackrock"
+      DB_CLIENT: "mysql"
+      DB_HOST: "host.docker.internal"
+      DB_PORT: "3306"
+      DB_USER: "root"
+      DB_PASS: "1"
+      DB_NAME: "directus_db"
+      WEBSOCKETS_ENABLED: "true"
+      CORS_ENABLED: "true"
+      CORS_ORIGIN: "http://localhost:3000"
+      CORS_METHODS: "GET,POST,PATCH,DELETE"
+      CORS_ALLOWED_HEADERS: "Content-Type,Authorization"
+      CORS_EXPOSED_HEADERS: "Content-Range"
+      CORS_CREDENTIALS: "true"
+      CORS_MAX_AGE: "18000"
+    env_file:
+      - .env
+    networks:
+      - app_network
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - 6379:6379
+    volumes:
+      - redis_data:/redis-data
+    command: redis-server --appendonly yes
+    networks:
+      - app_network
+
+#  nuxt:
+#    image: node:22
+#    container_name: nuxt
+#    working_dir: /app
+#    volumes:
+#      - ./frontend:/app
+#    ports:
+#      - "3000:3000"
+#    command: sh -c "npm install && npm run dev"
+#    depends_on:
+#      - directus
+#    networks:
+#      - app_network
+
+  python-service:
+    image: python:3.12-slim
+    container_name: python-service
+    working_dir: /app
+    build:
+      context: ./python-service  # Dockerfile'ın bulunduğu klasör
+      dockerfile: Dockerfile
+    volumes:
+      - ./python-service:/app
+    environment:
+      DIRECTUS_API_URL: "http://directus:8055"
+      DIRECTUS_API_TOKEN: "hxbQOJyLffUqoDIzsbWnth8E1hvRTBWu"
+    command: /bin/sh -c "pip install -r requirements.txt && cron -f"
+    depends_on:
+      - directus
+    networks:
+      - app_network
+
+volumes:
+  redis_data:
+
+networks:
+  app_network:
+    driver: bridge

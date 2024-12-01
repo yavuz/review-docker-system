@@ -1,0 +1,246 @@
+2024-11-25T22:06:23.985Z
+{}
+2024-11-25T22:09:04.546Z
+{}
+2024-11-25T22:09:53.829Z
+{}
+-----------------------
+-----------------------
+Timestamp: 2024-11-25T22:13:54.020Z
+Method: POST
+URL: /import-stores/trendyol/
+Headers: {
+  "accept": "application/json, text/plain, */*",
+  "content-type": "application/x-www-form-urlencoded",
+  "user-agent": "axios/1.7.7",
+  "content-length": "177",
+  "accept-encoding": "gzip, compress, deflate, br",
+  "host": "host.docker.internal:8055",
+  "connection": "close"
+}
+Query Parameters: {}
+Body: {}
+IP Address: 192.168.97.1
+-----------------------
+Timestamp: 2024-11-25T22:17:24.819Z
+Method: POST
+URL: /import-stores/trendyol/
+Headers: {
+  "accept": "application/json, text/plain, */*",
+  "content-type": "application/x-www-form-urlencoded",
+  "user-agent": "axios/1.7.7",
+  "content-length": "152",
+  "accept-encoding": "gzip, compress, deflate, br",
+  "host": "host.docker.internal:8055",
+  "connection": "close"
+}
+Query Parameters: {}
+Raw Body: {}
+Parsed Body: {}
+IP Address: 192.168.97.1
+-----------------------
+Timestamp: 2024-11-25T22:22:32.052Z
+Method: POST
+URL: /import-stores/trendyol/
+Headers: {
+  "accept": "application/json, text/plain, */*",
+  "content-type": "application/x-www-form-urlencoded",
+  "user-agent": "axios/1.7.7",
+  "content-length": "158",
+  "accept-encoding": "gzip, compress, deflate, br",
+  "host": "host.docker.internal:8055",
+  "connection": "close"
+}
+Query Parameters: {}
+Raw Body: {}
+Parsed Body: {}
+IP Address: 192.168.97.1
+-----------------------
+Timestamp: 2024-11-25T22:25:36.077Z
+Method: POST
+URL: /import-stores/trendyol/
+Headers: {
+  "accept": "application/json, text/plain, */*",
+  "content-type": "application/json",
+  "user-agent": "axios/1.7.7",
+  "content-length": "23",
+  "accept-encoding": "gzip, compress, deflate, br",
+  "host": "host.docker.internal:8055",
+  "connection": "close"
+}
+Query Parameters: {}
+Raw Body: {
+  "store_id": "34"
+}
+Parsed Body: {
+  "store_id": "34"
+}
+IP Address: 192.168.97.1
+-----------------------
+Timestamp: 2024-11-25T22:27:10.122Z
+Method: 35
+-----------------------
+Timestamp: 2024-11-25T22:37:18.085Z
+Store ID: 36
+-----------------------
+Timestamp: 2024-11-25T22:41:35.736Z
+Store ID: 37
+-----------------------
+Timestamp: 2024-11-25T22:42:23.344Z
+Store ID: 38
+Error: Cannot read properties of undefined (reading 'services')
+-----------------------
+Timestamp: 2024-11-25T22:59:48.153Z
+Store ID: 42
+-----------------------
+Timestamp: 2024-11-25T23:06:35.931Z
+Store ID: 43
+-----------------------
+Timestamp: 2024-11-25T23:08:05.566Z
+Store ID: 44
+-----------------------
+Timestamp: 2024-11-25T23:09:44.100Z
+Store ID: 45
+-----------------------
+Timestamp: 2024-11-25T23:11:22.166Z
+Store ID: 46
+**********
+-----------------------
+Timestamp: 2024-11-25T23:13:23.147Z
+Store ID: 47
+**********
+-----------------------
+Timestamp: 2024-11-25T23:16:24.680Z
+Store ID: 48
+**********
+-----------------------
+Timestamp: 2024-11-25T23:20:37.451Z
+Store ID: 49
+**********
+Accountability: {"role":null,"user":null,"roles":[],"admin":false,"app":false,"ip":"192.168.97.1","userAgent":"axios/1.7.7"}
+-----------------------
+Timestamp: 2024-11-25T23:24:28.580Z
+Store ID: 50
+**********
+Accountability: {"role":null,"user":null,"roles":[],"admin":false,"app":false,"ip":"192.168.97.1","userAgent":"axios/1.7.7"}
+Store Data: {"id":50,"status":"draft","user_created":"778150e4-1260-46b7-87a0-5c16998b63b5","date_created":"2024-11-25T23:24:29.000Z","user_updated":null,"date_updated":null,"name":"zdvadsfdsaf","user":null,"store_type":"trendyol","api_connect_info":null,"products":[]}
+-----------------------
+Timestamp: 2024-11-25T23:28:12.681Z
+Store ID: 51
+**********
+Accountability: {"role":null,"user":null,"roles":[],"admin":false,"app":false,"ip":"192.168.97.1","userAgent":"axios/1.7.7"}
+-----------------------
+Timestamp: 2024-11-25T23:29:25.202Z
+Store ID: 52
+**********
+Accountability: {"role":null,"user":null,"roles":[],"admin":false,"app":false,"ip":"192.168.97.1","userAgent":"axios/1.7.7"}
+-----------------------
+Timestamp: 2024-11-25T23:30:12.457Z
+Store ID: 53
+**********
+Accountability: {"role":null,"user":null,"roles":[],"admin":false,"app":false,"ip":"192.168.97.1","userAgent":"axios/1.7.7"}
+-----------------------
+Timestamp: 2024-11-26T09:36:50.806Z
+Store ID: 55
+**********
+Accountability: {"role":null,"user":null,"roles":[],"admin":false,"app":false,"ip":"192.168.97.1","userAgent":"axios/1.7.7"}
+-----------------------
+Timestamp: 2024-11-26T09:39:00.895Z
+Store ID: 56
+**********
+Accountability: {"role":null,"user":null,"roles":[],"admin":false,"app":false,"ip":"192.168.97.1","userAgent":"axios/1.7.7"}
+-----------------------
+Timestamp: 2024-11-26T09:40:19.134Z
+Store ID: 57
+**********
+Accountability: {"role":null,"user":null,"roles":[],"admin":false,"app":false,"ip":"192.168.97.1","userAgent":"axios/1.7.7"}
+-----------------------
+Timestamp: 2024-11-26T09:49:34.869Z
+Store ID: 58
+**********
+Accountability: {"role":null,"user":null,"roles":[],"admin":false,"app":false,"ip":"192.168.97.1","userAgent":"axios/1.7.7"}
+-----------------------
+Timestamp: 2024-11-26T09:51:45.948Z
+Store ID: 59
+**********
+Accountability: {"role":null,"user":null,"roles":[],"admin":false,"app":false,"ip":"192.168.97.1","userAgent":"axios/1.7.7"}
+-----------------------
+Timestamp: 2024-11-26T10:07:22.537Z
+Store ID: 60
+**********
+Queue Error: ReferenceError: require is not defined
+-----------------------
+Timestamp: 2024-11-26T10:11:21.079Z
+Store ID: 61
+**********
+Queue Error: Error: Handshake terminated by server: 403 (ACCESS-REFUSED) with message "ACCESS_REFUSED - Login was refused using authentication mechanism PLAIN. For details see the broker logfile."
+-----------------------
+Timestamp: 2024-11-26T10:30:36.067Z
+Store ID: 62
+**********
+Sent to queue: {"api_connect_info":null,"store_id":"62"}
+-----------------------
+Timestamp: 2024-11-26T22:19:54.038Z
+Store ID: 63
+**********
+Sent to queue: {"api_connect_info":null,"store_id":"63"}
+-----------------------
+Timestamp: 2024-11-26T22:40:17.538Z
+Store ID: 64
+**********
+Sent to queue: {"api_connect_info":null,"store_id":"64"}
+-----------------------
+Timestamp: 2024-11-26T22:43:52.817Z
+Store ID: 65
+**********
+Sent to queue: {"api_connect_info":{"token_key":"selam"},"store_id":"65"}
+-----------------------
+Timestamp: 2024-11-26T22:45:46.043Z
+Store ID: 66
+**********
+Sent to queue: {"api_connect_info":null,"store_id":"66"}
+-----------------------
+Timestamp: 2024-11-28T10:04:33.569Z
+Store ID: 67
+**********
+Sent to queue: {"api_connect_info":null,"store_id":"67"}
+-----------------------
+Timestamp: 2024-11-28T10:22:38.941Z
+Store ID: 68
+**********
+Sent to queue: {"api_connect_info":null,"store_id":"68"}
+-----------------------
+Timestamp: 2024-11-28T10:24:21.782Z
+Store ID: 69
+**********
+Sent to queue: {"api_connect_info":null,"store_id":"69"}
+-----------------------
+Timestamp: 2024-11-28T10:31:26.169Z
+Store ID: 70
+**********
+Sent to queue: {"api_connect_info":{"api_key":"GpuS1j4P3psPZw0UtrOM","store_id":"1005260","token_key":"R3B1UzFqNFAzcHNQWncwVXRyT006MjQ1QlM4SWdsb0plcUk0UW1ENFk=","api_secret":"245BS8IgloJeqI4QmD4Y"},"store_id":"70"}
+-----------------------
+Timestamp: 2024-11-28T10:33:17.747Z
+Store ID: 71
+**********
+Sent to queue: {"api_connect_info":null,"store_id":"71"}
+-----------------------
+Timestamp: 2024-11-28T10:34:39.388Z
+Store ID: 72
+**********
+Sent to queue: {"api_connect_info":{"api_key":"GpuS1j4P3psPZw0UtrOM","store_id":"1005260","token_key":"R3B1UzFqNFAzcHNQWncwVXRyT006MjQ1QlM4SWdsb0plcUk0UW1ENFk=","api_secret":"245BS8IgloJeqI4QmD4Y"},"store_id":"72"}
+-----------------------
+Timestamp: 2024-11-28T10:39:02.358Z
+Store ID: 73
+**********
+Sent to queue: {"api_connect_info":{"api_key":"GpuS1j4P3psPZw0UtrOM","store_id":"1005260","token_key":"R3B1UzFqNFAzcHNQWncwVXRyT006MjQ1QlM4SWdsb0plcUk0UW1ENFk=","api_secret":"245BS8IgloJeqI4QmD4Y"},"store_id":"73"}
+-----------------------
+Timestamp: 2024-11-28T10:47:44.935Z
+Store ID: 74
+**********
+Sent to queue: {"api_connect_info":{"api_key":"GpuS1j4P3psPZw0UtrOM","store_id":"1005260","token_key":"R3B1UzFqNFAzcHNQWncwVXRyT006MjQ1QlM4SWdsb0plcUk0UW1ENFk=","api_secret":"245BS8IgloJeqI4QmD4Y"},"store_id":"74"}
+-----------------------
+Timestamp: 2024-11-28T10:49:49.712Z
+Store ID: 75
+**********
+Sent to queue: {"api_connect_info":{"api_key":"GpuS1j4P3psPZw0UtrOM","store_id":"1005260","token_key":"R3B1UzFqNFAzcHNQWncwVXRyT006MjQ1QlM4SWdsb0plcUk0UW1ENFk=","api_secret":"245BS8IgloJeqI4QmD4Y"},"store_id":"75"}
