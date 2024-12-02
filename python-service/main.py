@@ -10,6 +10,17 @@ load_dotenv()
 async def process_store(store_data):
     store_type = store_data.get('store_type', '').lower()
     try:
+        # Directus bağlantısını oluştur
+        directus_api_url = os.getenv("DIRECTUS_API_URL")
+        directus_api_token = os.getenv("DIRECTUS_API_TOKEN")
+        directus = await Directus(directus_api_url, token=directus_api_token)
+
+        # Mağazanın import durumunu "product_info_being_fetched" olarak güncelle
+        stores_collection = directus.collection('stores')
+        await stores_collection.update(store_data['id'], {
+            'import_status': 'product_info_being_fetched'
+        })
+
         # Dynamically import the appropriate parser module
         parser_module = importlib.import_module(f'parsers.{store_type}')
         # Call the parse_store function from the parser module
@@ -18,11 +29,6 @@ async def process_store(store_data):
         if products and isinstance(products, list):
             print(f"Adding {len(products)} products to Directus...")
             
-            # Directus bağlantısını oluştur
-            directus_api_url = os.getenv("DIRECTUS_API_URL")
-            directus_api_token = os.getenv("DIRECTUS_API_TOKEN")
-            directus = await Directus(directus_api_url, token=directus_api_token)
-
             print(f"Adding {len(products)} products to Directus...")
             for product in products:
                 try:
@@ -77,7 +83,6 @@ async def fetch_store_data():
             .filter(F(import_status='product_info_not_fetched')) \
             .limit(10) \
             .read()
-
     
         if stores.items:
             for store in stores.items:
