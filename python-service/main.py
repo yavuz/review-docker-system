@@ -145,7 +145,7 @@ async def process_store(store_data):
 
                 # Mağazanın review import durumunu güncelle
                 await stores_collection.update(store_data['id'], {
-                    'import_status': 'reviews_fetched'
+                    'import_status': 'store_reviews_fetched'
                 })
 
             except Exception as e:
