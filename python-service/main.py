@@ -44,11 +44,13 @@ async def process_store(store_data):
                     
                     if existing_product.items:
                         # Ürün varsa güncelle
+                        product['user'] = store_data.get('user')  # Add user data from store
                         updated_product = await products_collection.update(existing_product.items[0]['id'], product)
                         processed_products.append(updated_product)
                         print(f"Updated product: {product['name']}")
                     else:
                         # Ürün yoksa yeni ekle
+                        product['user'] = store_data.get('user')  # Add user data from store
                         created_product = await products_collection.create(product)
                         processed_products.append(created_product)
                         print(f"Added new product: {product['name']}")
@@ -122,7 +124,8 @@ async def process_store(store_data):
                                 "sentiment": sentiment,
                                 "status": "published",
                                 "store": store_data['id'],
-                                "extra_fields": review
+                                "extra_fields": review,
+                                "user": store_data.get('user')  # Add user data from store
                             }
 
                             if existing_review.items:
