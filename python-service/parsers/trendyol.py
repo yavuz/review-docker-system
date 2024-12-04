@@ -1,6 +1,8 @@
 import requests
+import os
 from datetime import datetime
 from typing import List, Dict, Any
+from py_directus import Directus, F
 
 def fetch_store_data(store_id: str, token_key: str, page: int = 0, approved: bool = True, size: int = 50) -> dict:
     """
@@ -102,24 +104,44 @@ async def parse_store(store_data):
     api_info = store_data.get('api_connect_info', {})
 
     if api_info:
-        print(f"Processing with API credentials: {api_info['store_id']}")
+        try:
+            print(f"Processing with API credentials: {api_info['store_id']}")
 
-        all_products = fetch_all_store_data(
-            store_id=api_info['store_id'],
-            token_key=api_info['token_key'],
-        )
+            # Ürünleri çek
+            all_products = fetch_all_store_data(
+                store_id=api_info['store_id'],
+                token_key=api_info['token_key'],
+            )
 
-        print(f"Total products fetched: {len(all_products)}")
-        
-        # Ürünleri Directus formatına dönüştür
-        directus_products = [
-            transform_product_for_directus(product, store_data['id']) 
-            for product in all_products
-        ]
+            print(f"Total products fetched: {len(all_products)}")
+            
+            # Ürünleri Directus formatına dönüştür
+            directus_products = [
+                transform_product_for_directus(product, store_data['id']) 
+                for product in all_products
+            ]
 
-        # print(f"Total products transformed: {directus_products}")
-        
-        return directus_products
+            print(f"Total products transformed: {len(directus_products)}")
+            
+            # Ürünleri Directus'a ekle
+            processed_products = await add_products_to_directus(directus_products, store_data)
+            print(f"Total products processed: {len(processed_products)}")
+
+            # Yorumları çek ve ekle
+            raw_reviews = fetch_all_store_reviews(
+                store_id=api_info['store_id'],
+                token_key=api_info['token_key']
+            )
+            print(f"Total reviews fetched: {len(raw_reviews)}")
+            
+            # Yorumları Directus'a ekle
+            await add_reviews_to_directus(raw_reviews, store_data)
+            
+            return processed_products
+
+        except Exception as e:
+            print(f"Error in parse_store: {str(e)}")
+            return []
 
     return True
 
@@ -188,3 +210,94 @@ def fetch_all_store_reviews(store_id: str, token_key: str, size: int = 1000) -> 
         current_page += 1
     
     return all_reviews
+
+async def add_products_to_directus(products: List[Dict], store_data: Dict):
+    """
+    Ürünleri Directus'a ekler veya günceller
+    
+    Args:
+        products (List[Dict]): Eklenecek ürün listesi
+        store_data (Dict): Mağaza bilgileri
+    """
+    directus_api_url = os.getenv("DIRECTUS_API_URL")
+    directus_api_token = os.getenv("DIRECTUS_API_TOKEN")
+    directus = await Directus(directus_api_url, token=directus_api_token)
+    
+    processed_products = []
+    for product in products:
+        try:
+            products_collection = directus.collection('products')
+            
+            # Ürünün zaten var olup olmadığını kontrol et
+            existing_product = await products_collection.filter(
+                (F(sku=product['sku']) & F(store=store_data['id']))
+            ).read()
+            
+            if existing_product.items:
+                # Ürün varsa güncelle
+                product['user'] = store_data.get('user')
+                updated_product = await products_collection.update(existing_product.items[0]['id'], product)
+                processed_products.append(updated_product)
+                print(f"Updated product: {product['name']}")
+            else:
+                # Ürün yoksa yeni ekle
+                product['user'] = store_data.get('user')
+                created_product = await products_collection.create(product)
+                processed_products.append(created_product)
+                print(f"Added new product: {product['name']}")
+        except Exception as e:
+            print(f"Error processing product {product['name']}: {str(e)}")
+            continue
+    
+    return processed_products
+
+async def add_reviews_to_directus(raw_reviews: List[Dict], store_data: Dict):
+    """
+    Yorumları Directus'a ekler
+    
+    Args:
+        raw_reviews (List[Dict]): Eklenecek yorum listesi
+        store_data (Dict): Mağaza bilgileri
+    """
+    directus_api_url = os.getenv("DIRECTUS_API_URL")
+    directus_api_token = os.getenv("DIRECTUS_API_TOKEN")
+    directus = await Directus(directus_api_url, token=directus_api_token)
+    
+    reviews_collection = directus.collection('reviews')
+    products_collection = directus.collection('products')
+    
+    for review in raw_reviews:
+        try:
+            # review_target_id'yi oluştur
+            review_target_id = f"trendyol_{review['contentId']}"
+            
+            # Yorumun daha önce eklenip eklenmediğini kontrol et
+            existing_review = await reviews_collection.filter(
+                F(review_target_id=review_target_id)
+            ).read()
+            
+            # Products tablosundan eşleşen ürünü bul
+            matching_product = await products_collection.filter(
+                (F(store_type='trendyol') & F(product_id=str(review['contentId'])))
+            ).read()
+            
+            if matching_product.items:
+                product_id = matching_product.items[0]['id']
+                
+                if not existing_review.items:
+                    # Yeni yorum ekle
+                    review_data = {
+                        'review_target_id': review_target_id,
+                        'content': review.get('comment', ''),
+                        'rating': review.get('rate', 0),
+                        'user_name': review.get('userFullName', ''),
+                        'product': product_id,
+                        'store': store_data['id'],
+                        'status': 'published',
+                        'extra_fields': review
+                    }
+                    await reviews_collection.create(review_data)
+                    print(f"Added new review for product {product_id}")
+        except Exception as e:
+            print(f"Error processing review: {str(e)}")
+            continue
