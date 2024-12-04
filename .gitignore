@@ -3,3 +3,54 @@ uploads/*
 node_modules/
 **/node_modules/
 **/__pycache__/%
+
+# Python dosyaları
+*.py[cod]
+__pycache__/
+*.so
+*.pyc
+*.pyo
+
+# Sanal ortam
+venv/
+env/
+.env/
+.venv/
+
+# IDE dosyaları
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Dağıtım/paketleme
+dist/
+build/
+*.egg
+*.egg-info/
+
+# Unit test / coverage raporları
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.pytest_cache/
+
+# Logs ve databases
+*.log
+*.sqlite
+*.db
+
+# Yerel konfigürasyon dosyaları
+instance/
+.webassets-cache
+config.ini
+settings.local.py
+
+# Jupyter Notebook
+.ipynb_checkpoints

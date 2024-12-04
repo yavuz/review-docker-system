@@ -49,7 +49,7 @@ async def fetch_store_data():
         directus = await Directus(directus_api_url, token=directus_api_token)
 
         # Get stores collection
-        stores_collection = directus.collection('stores')
+        # stores_collection = directus.collection('stores')
 
         stores_collection = directus.collection('stores') \
             .filter(F(id='73')) \
