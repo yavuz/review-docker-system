@@ -4,6 +4,9 @@ from datetime import datetime
 from typing import List, Dict, Any
 from py_directus import Directus, F
 
+# Global variables
+STORE_TYPE = 'trendyol'
+
 def fetch_store_data(store_id: str, token_key: str, page: int = 0, approved: bool = True, size: int = 50) -> dict:
     """
     Fetch store data from Trendyol API
@@ -265,39 +268,61 @@ async def add_reviews_to_directus(raw_reviews: List[Dict], store_data: Dict):
     
     reviews_collection = directus.collection('reviews')
     products_collection = directus.collection('products')
+    store_type = STORE_TYPE
     
     for review in raw_reviews:
         try:
             # review_target_id'yi oluştur
-            review_target_id = f"trendyol_{review['contentId']}"
+            review_target_id = f"{store_type}_{review['contentId']}"
             
-            # Yorumun daha önce eklenip eklenmediğini kontrol et
+            # Önce bu review'in daha önce eklenip eklenmediğini kontrol et
             existing_review = await reviews_collection.filter(
                 F(review_target_id=review_target_id)
             ).read()
-            
             # Products tablosundan eşleşen ürünü bul
             matching_product = await products_collection.filter(
-                (F(store_type='trendyol') & F(product_id=str(review['contentId'])))
+                (F(store_type=store_type) & F(product_id=str(review['contentId'])))
             ).read()
-            
             if matching_product.items:
                 product_id = matching_product.items[0]['id']
                 
-                if not existing_review.items:
-                    # Yeni yorum ekle
-                    review_data = {
-                        'review_target_id': review_target_id,
-                        'content': review.get('comment', ''),
-                        'rating': review.get('rate', 0),
-                        'user_name': review.get('userFullName', ''),
-                        'product': product_id,
-                        'store': store_data['id'],
-                        'status': 'published',
-                        'extra_fields': review
-                    }
+                # Review nesnesini hazırla
+                content = review.get('comment', '')
+                rating = review.get('rate', 0)
+                review_date = datetime.fromtimestamp(review['createdDate'] / 1000.0).strftime('%Y-%m-%d')
+                review_created_date = datetime.fromtimestamp(review['createdDate'] / 1000.0).isoformat()
+                
+                # Sentiment hesaplama
+                if rating >= 4:
+                    sentiment = 'positive'
+                elif rating == 3:
+                    sentiment = 'neutral'
+                else:
+                    sentiment = 'negative'
+                review_data = {
+                    "review_target_id": review_target_id,
+                    "product": product_id,
+                    "content": content,
+                    "rating": rating,
+                    "review_date": review_date,
+                    "review_created_date": review_created_date,
+                    "source": "Trendyol",
+                    "sentiment": sentiment,
+                    "status": "published",
+                    "store": store_data['id'],
+                    "extra_fields": review,
+                    "user": store_data.get('user')  # Add user data from store
+                }
+                if existing_review.items:
+                    # Review varsa güncelle
+                    await reviews_collection.update(existing_review.items[0]['id'], review_data)
+                    print(f"Updated review: {review_target_id}")
+                else:
+                    # Review yoksa yeni ekle
                     await reviews_collection.create(review_data)
-                    print(f"Added new review for product {product_id}")
+                    print(f"Added new review: {review_target_id}")
+            else:
+                print(f"Warning: No matching product found for {review_target_id}")
         except Exception as e:
             print(f"Error processing review: {str(e)}")
             continue
