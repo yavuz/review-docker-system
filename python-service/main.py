@@ -52,10 +52,11 @@ async def fetch_store_data():
         # stores_collection = directus.collection('stores')
 
         stores_collection = directus.collection('stores') \
-            .filter(F(id='73')) \
+            .filter(F(import_status='product_info_not_fetched')) \
             .limit(10)
 
-        #.filter(F(import_status='store_reviews_fetched')) \
+        #
+        #.filter(F(id='73')) \
 
         print("Getting stores...")
 
