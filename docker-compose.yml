@@ -20,7 +20,7 @@ services:
       DB_NAME: "directus_db"
       WEBSOCKETS_ENABLED: "true"
       CORS_ENABLED: "true"
-      CORS_ORIGIN: "http://nuxt:3000,http://localhost:3000"
+      CORS_ORIGIN: "http://nuxt:3000,http://localhost:3000,http://127.0.0.1:3000,http://reviews.local"
       CORS_METHODS: "GET,POST,PUT,PATCH,DELETE,OPTIONS"
       CORS_ALLOWED_HEADERS: "Content-Type,Authorization"
       CORS_EXPOSED_HEADERS: "Content-Range"
@@ -29,7 +29,9 @@ services:
     env_file:
       - .env
     networks:
-      - app_network
+      app_network:
+        aliases:
+          - api.reviews.local
 
   redis:
     image: redis:7.4-alpine
@@ -41,19 +43,22 @@ services:
     networks:
       - app_network
 
-#  nuxt:
-#    image: node:22
-#    container_name: nuxt
-#    working_dir: /app
-#    volumes:
-#      - ./frontend:/app
-#    ports:
-#      - "3000:3000"
-#    command: sh -c "npm install && npm run dev"
-#    depends_on:
-#      - directus
-#    networks:
-#      - app_network
+  nuxt:
+    image: node:23
+    container_name: nuxt
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "3000:3000"
+    command: sh -c "npm install && npm run dev"
+    depends_on:
+      directus:
+        condition: service_started
+    networks:
+      - app_network
+    environment:
+      - NUXT_PUBLIC_DIRECTUS_URL=http://api.reviews.local
 
   python-service:
     image: python:3.12-slim
@@ -67,6 +72,23 @@ services:
     command: /bin/sh -c "pip install -r requirements.txt && cron -f"
     depends_on:
       - directus
+    networks:
+      - app_network
+    environment:
+      - DIRECTUS_SERVER_URL=http://directus:8055
+      - DIRECTUS_URL=http://api.reviews.local:8055
+
+
+  nginx-proxy-manager:
+    image: 'jc21/nginx-proxy-manager:latest'
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '81:81'
+      - '443:443'
+    volumes:
+      - ./nginx:/data
+      - ./letsencrypt:/etc/letsencrypt
     networks:
       - app_network
 
