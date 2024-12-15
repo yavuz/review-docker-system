@@ -1,3 +1,5 @@
 requests
 python-dotenv
 py-directus
+aiohttp
+bs4
