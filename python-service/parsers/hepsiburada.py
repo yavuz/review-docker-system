@@ -277,8 +277,7 @@ async def save_reviews(reviews: List[Dict], product_id: str, store_id: str, stor
         directus_api_url = os.getenv("DIRECTUS_API_URL")
         directus_api_token = os.getenv("DIRECTUS_API_TOKEN")
         directus = await Directus(directus_api_url, token=directus_api_token)
-        
-        reviews_collection = directus.collection('reviews')
+
         store_type = STORE_TYPE
         
         for review in reviews:
@@ -322,14 +321,13 @@ async def save_reviews(reviews: List[Dict], product_id: str, store_id: str, stor
                 }
             }
             
+            reviews_collection = directus.collection('reviews')
+
             # Review'in var olup olmadığını kontrol et
-            print(f"Yorum aranıyor - Review Target ID: {review_target_id}")
-            print(f"Ürün ID: {product_id}")
-            print(f"Mağaza ID: {store_id}")
+            # print(f"Yorum aranıyor - Review Target ID: {review_target_id}")
             existing_review = await reviews_collection.filter(
                 F(review_target_id=review_target_id)
             ).read()
-            #print(f"Bulunan yorum sayısı: {len(existing_review.items)}")
             
             
             if existing_review.items:
