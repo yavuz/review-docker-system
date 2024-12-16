@@ -7,6 +7,9 @@ from datetime import datetime
 import os
 from py_directus import Directus, F
 
+# Global variables
+STORE_TYPE = 'hepsiburada'
+
 async def parse_store(store_data: Dict) -> bool:
     try:
         print(f"Hepsiburada mağazası işleniyor: {store_data['name']}")
@@ -200,7 +203,7 @@ async def save_product(product: Dict, store_id: str, store_data: Dict) -> None:
             'user': store_data.get('user'),
             'images': [img['linkFormat'].replace('{size}', '1200') for img in product['images']],
             'url': f"https://www.hepsiburada.com{product['productUrl']}",
-            'store_type': 'hepsiburada',
+            'store_type': STORE_TYPE,
             'status': 'published',
             'extra_fields': {
                 'brand': product['brandName'],
@@ -228,7 +231,140 @@ async def save_product(product: Dict, store_id: str, store_data: Dict) -> None:
             # Ürün yoksa yeni ekle
             created_product = await products_collection.create(product_data)
             print(f"Yeni ürün eklendi: {product_data['name']}")
+        
+        # Ürünün yorumlarını çek
+        print(f"Yorumlar çekiliyor: {product_data['sku']}")
+        await fetch_all_reviews(
+            product_data['sku'],
+            existing_product.items[0]['id'] if existing_product.items else created_product['id'],
+            store_id,
+            store_data
+        )
             
     except Exception as e:
         print(f"Ürün kaydedilirken hata: {str(e)}")
         print(f"Ürün verisi: {product_data}")
+
+async def fetch_product_reviews(sku: str, from_index: int = 0, size: int = 100) -> Optional[Dict]:
+    """Ürün yorumlarını çeken fonksiyon"""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:132.0) Gecko/20100101 Firefox/132.0",
+        'Accept': 'application/json',
+        'Accept-Language': 'tr,en-US;q=0.7,en;q=0.3',
+    }
+    
+    url = f"https://user-content-gw-hermes.hepsiburada.com/queryapi/v2/ApprovedUserContents"
+    params = {
+        "skuList": sku,
+        "from": from_index,
+        "size": size
+    }
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, params=params) as response:
+                if response.status != 200:
+                    print(f"Hata: HTTP {response.status}")
+                    return None
+                    
+                return await response.json()
+    except Exception as e:
+        print(f"Yorumlar alınırken hata: {str(e)}")
+        return None
+
+async def save_reviews(reviews: List[Dict], product_id: str, store_id: str, store_data: Dict):
+    try:
+        directus_api_url = os.getenv("DIRECTUS_API_URL")
+        directus_api_token = os.getenv("DIRECTUS_API_TOKEN")
+        directus = await Directus(directus_api_url, token=directus_api_token)
+        
+        reviews_collection = directus.collection('reviews')
+        store_type = STORE_TYPE
+        
+        for review in reviews:
+            # İçerik kontrolü
+            if not review.get('review', {}).get('content'):
+                print("Boş yorum içeriği, atlaniyor...")
+                continue
+                
+            review_date = datetime.fromisoformat(review['createdAt'].split('+')[0])
+            
+            # Sentiment hesaplama
+            rating = review['star']
+            if rating >= 4:
+                sentiment = 'positive'
+            elif rating == 3:
+                sentiment = 'neutral'
+            else:
+                sentiment = 'negative'
+                
+
+            # review_target_id'yi oluştur
+            review_target_id = f"{store_type}_{review['id']}"
+
+            review_data = {
+                'review_target_id': review_target_id,
+                'content': review['review']['content'],
+                'rating': rating,
+                'review_date': review_date.strftime('%Y-%m-%d'),
+                'review_created_date': review_date.isoformat(),
+                'source': 'hepsiburada',
+                'sentiment': sentiment,
+                'product': product_id,
+                'status': 'published',
+                'store': store_id,
+                'user': store_data.get('user'),
+                'extra_fields': {
+                    'customer': review['customer'],
+                    'isPurchaseVerified': review['isPurchaseVerified'],
+                    'media': review['media'],
+                    'merchant': review['order']['merchantName']
+                }
+            }
+            
+            # Review'in var olup olmadığını kontrol et
+            print(f"Yorum aranıyor - Review Target ID: {review_target_id}")
+            print(f"Ürün ID: {product_id}")
+            print(f"Mağaza ID: {store_id}")
+            existing_review = await reviews_collection.filter(
+                F(review_target_id=review_target_id)
+            ).read()
+            #print(f"Bulunan yorum sayısı: {len(existing_review.items)}")
+            
+            
+            if existing_review.items:
+                await reviews_collection.update(existing_review.items[0]['id'], review_data)
+                print(f"Yorum güncellendi: {review_data['review_target_id']}")
+            else:
+                await reviews_collection.create(review_data)
+                print(f"Yeni yorum eklendi: {review_data['review_target_id']}")
+                import sys
+                sys.exit()
+
+    
+    except Exception as e:
+        print(f"Yorumlar kaydedilirken hata: {str(e)}")
+
+async def fetch_all_reviews(sku: str, product_id: str, store_id: str, store_data: Dict):
+    """Tüm yorumları çeken ve kaydeden fonksiyon"""
+    from_index = 0
+    size = 100
+    
+    while True:
+        response = await fetch_product_reviews(sku, from_index, size)
+        if not response:
+            break
+            
+        reviews = response['data']['approvedUserContent']['approvedUserContentList']
+        if not reviews:
+            break
+            
+        await save_reviews(reviews, product_id, store_id, store_data)
+        
+        # Sonraki sayfa kontrolü
+        if not response['links'].get('next'):
+            break
+            
+        from_index += size
+        # Rate limiting
+        await asyncio.sleep(1)
