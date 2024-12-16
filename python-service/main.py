@@ -18,11 +18,9 @@ async def process_store(store_data):
 
         # Mağazanın import durumunu "fetching_store_reviews" olarak güncelle
         stores_collection = directus.collection('stores')
-        '''
         await stores_collection.update(store_data['id'], {
             'import_status': 'fetching_store_reviews'
         })
-        '''
 
         # Dynamically import the appropriate parser module
         parser_module = importlib.import_module(f'parsers.{store_type}')
@@ -34,21 +32,17 @@ async def process_store(store_data):
         await parser_module.parse_store(store_data)
         
         # Mağazanın import durumunu "completed" olarak güncelle
-        '''
         await stores_collection.update(store_data['id'], {
-            'import_status': 'completed'
+            'import_status': 'store_reviews_fetched'
         })
-        '''
 
     except Exception as e:
         print(f"Error in process_store: {str(e)}")
         # Hata durumunda import_status'u "error" olarak güncelle
-        '''
         stores_collection = directus.collection('stores')
         await stores_collection.update(store_data['id'], {
             'import_status': 'error'
         })
-        '''
 
 async def fetch_store_data():
     try:
@@ -70,6 +64,12 @@ async def fetch_store_data():
         print("Getting stores...")
 
         stores = await stores_collection.read()
+        
+        if not stores.items:
+            print("Hiç mağaza bulunamadı.")
+            return
+        
+        print(f"Toplam {len(stores.items)} mağaza bulundu.")
 
         # Process each store
         for store in stores.items:
