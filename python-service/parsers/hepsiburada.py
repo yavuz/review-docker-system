@@ -16,6 +16,8 @@ async def parse_store(store_data: Dict) -> bool:
         api_info = store_data.get('api_connect_info', {})
         
         if not api_info:
+            # API bilgisi yoksa durumu güncelle
+            await update_import_status(store_data['id'], 'api_info_missing')
             return False
             
         directus_store_id = store_data.get('id')
@@ -29,13 +31,26 @@ async def parse_store(store_data: Dict) -> bool:
         print("Store details: ", store_details)
         if store_details:
             await update_store_info(directus_store_id, store_details)
+        else:
+            # Mağaza detayları alınamazsa durumu güncelle
+            await update_import_status(store_data['id'], 'store_details_fetch_failed')
+            return False
         
         # Ürünleri çek
-        await fetch_all_products(store_url, directus_store_id, store_data)
+        products_result = await fetch_all_products(store_url, directus_store_id, store_data)
+        if not products_result:
+            # Ürünler çekilemezse durumu güncelle
+            await update_import_status(store_data['id'], 'error_while_fetching_product_info')
+            return False
         
+        # Başarılı durumda import_status'u güncelle
+        await update_import_status(store_data['id'], 'store_reviews_fetched')
         return True
+        
     except Exception as e:
         print(f"Hata oluştu: {str(e)}")
+        # Genel hata durumunda import_status'u güncelle
+        await update_import_status(store_data['id'], 'error')
         return False
 
 async def get_store_details(store_url: str) -> Optional[Dict]:
@@ -100,44 +115,50 @@ async def update_store_info(store_id: str, store_details: Dict) -> None:
     except Exception as e:
         print(f"Mağaza bilgileri güncellenirken hata: {str(e)}")
 
-async def fetch_all_products(store_url: str, store_id: str, store_data: Dict) -> None:
-    page = 1
-    total_products = None
-    processed_products = 0
-    
-    # İlk sayfadan toplam ürün sayısını al
-    first_page = await fetch_page_products(store_url, page)
-    if first_page and 'totalProductCount' in first_page:
-        total_products = first_page['totalProductCount']
-        products = first_page['products']
-    else:
-        print("Ürün bilgisi alınamadı")
-        return
-
-    print(f"Toplam ürün sayısı: {total_products}")
-
-    while True:
-        if not products:
-            print(f"Sayfa {page} için ürün bulunamadı")
-            break
-            
-        for product in products:
-            await save_product(product, store_id, store_data)
-            processed_products += 1
-            
-        if processed_products >= total_products:
-            print(f"Tüm ürünler işlendi. Toplam: {processed_products}")
-            break
-            
-        page += 1
-        page_data = await fetch_page_products(store_url, page)
-        if not page_data:
-            break
-        products = page_data['products']
+async def fetch_all_products(store_url: str, store_id: str, store_data: Dict) -> bool:
+    try:
+        page = 1
+        total_products = None
+        processed_products = 0
         
-        # Her 10 ürün işlendikten sonra kısa bir bekleme
-        if processed_products % 10 == 0:
-            await asyncio.sleep(1)
+        # İlk sayfadan toplam ürün sayısını al
+        first_page = await fetch_page_products(store_url, page)
+        if first_page and 'totalProductCount' in first_page:
+            total_products = first_page['totalProductCount']
+            products = first_page['products']
+        else:
+            print("Ürün bilgisi alınamadı")
+            return False
+
+        print(f"Toplam ürün sayısı: {total_products}")
+
+        while True:
+            if not products:
+                print(f"Sayfa {page} için ürün bulunamadı")
+                break
+            
+            for product in products:
+                await save_product(product, store_id, store_data)
+                processed_products += 1
+            
+            if processed_products >= total_products:
+                print(f"Tüm ürünler işlendi. Toplam: {processed_products}")
+                break
+            
+            page += 1
+            page_data = await fetch_page_products(store_url, page)
+            if not page_data:
+                break
+            products = page_data['products']
+            
+            # Her 10 ürün işlendikten sonra kısa bir bekleme
+            if processed_products % 10 == 0:
+                await asyncio.sleep(1)
+
+        return True
+    except Exception as e:
+        print(f"Ürünler işlenirken hata: {str(e)}")
+        return False
 
 async def fetch_page_products(store_url: str, page: int) -> Optional[Dict]:
     headers = {
@@ -301,6 +322,10 @@ async def save_reviews(reviews: List[Dict], product_id: str, store_id: str, stor
             # review_target_id'yi oluştur
             review_target_id = f"{store_type}_{review['id']}"
 
+            merchant_name = 'Bilinmiyor'
+            if review.get('order') is not None:
+                merchant_name = review['order'].get('merchant', 'Bilinmiyor')
+
             review_data = {
                 'review_target_id': review_target_id,
                 'content': review['review']['content'],
@@ -317,7 +342,7 @@ async def save_reviews(reviews: List[Dict], product_id: str, store_id: str, stor
                     'customer': review['customer'],
                     'isPurchaseVerified': review['isPurchaseVerified'],
                     'media': review['media'],
-                    'merchant': review['order']['merchantName']
+                    'merchant': merchant_name,
                 }
             }
             
@@ -336,8 +361,6 @@ async def save_reviews(reviews: List[Dict], product_id: str, store_id: str, stor
             else:
                 await reviews_collection.create(review_data)
                 print(f"Yeni yorum eklendi: {review_data['review_target_id']}")
-                import sys
-                sys.exit()
 
     
     except Exception as e:
@@ -366,3 +389,17 @@ async def fetch_all_reviews(sku: str, product_id: str, store_id: str, store_data
         from_index += size
         # Rate limiting
         await asyncio.sleep(1)
+
+async def update_import_status(store_id: str, status: str) -> None:
+    try:
+        directus_api_url = os.getenv("DIRECTUS_API_URL")
+        directus_api_token = os.getenv("DIRECTUS_API_TOKEN")
+        directus = await Directus(directus_api_url, token=directus_api_token)
+        
+        stores_collection = directus.collection('stores')
+        await stores_collection.update(store_id, {
+            'import_status': status
+        })
+        print(f"Import status güncellendi: {status}")
+    except Exception as e:
+        print(f"Import status güncellenirken hata: {str(e)}")

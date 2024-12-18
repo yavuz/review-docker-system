@@ -29,12 +29,13 @@ async def process_store(store_data):
         print("Store data: ", store_data)
         
         # Call the parse_store function from the parser module to get products
-        await parser_module.parse_store(store_data)
+        parse_result = await parser_module.parse_store(store_data)
         
-        # Mağazanın import durumunu "completed" olarak güncelle
-        await stores_collection.update(store_data['id'], {
-            'import_status': 'store_reviews_fetched'
-        })
+        # Sadece parse_result True ise import_status'u güncelle
+        if parse_result:
+            await stores_collection.update(store_data['id'], {
+                'import_status': 'store_reviews_fetched'
+            })
 
     except Exception as e:
         print(f"Error in process_store: {str(e)}")

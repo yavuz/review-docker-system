@@ -1,6 +1,6 @@
 services:
   directus:
-    image: directus/directus:11.3.2
+    image: directus/directus:11.3.5
     ports:
       - 8055:8055
     volumes:
@@ -12,10 +12,10 @@ services:
       SECRET: "replace-with-secure-random-value"
       ADMIN_EMAIL: "yvzyldrm@gmail.com"
       ADMIN_PASSWORD: "blackrock"
-      DB_CLIENT: "mysql"
+      DB_CLIENT: "pg"
       DB_HOST: "host.docker.internal"
-      DB_PORT: "3306"
-      DB_USER: "root"
+      DB_PORT: "5432"
+      DB_USER: "postgres"
       DB_PASS: "1"
       DB_NAME: "directus_db"
       WEBSOCKETS_ENABLED: "true"
