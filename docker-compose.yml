@@ -13,7 +13,7 @@ services:
       ADMIN_EMAIL: "yvzyldrm@gmail.com"
       ADMIN_PASSWORD: "blackrock"
       DB_CLIENT: "pg"
-      DB_HOST: "host.docker.internal"
+      DB_HOST: "postgres"
       DB_PORT: "5432"
       DB_USER: "postgres"
       DB_PASS: "1"
@@ -78,6 +78,18 @@ services:
       - DIRECTUS_SERVER_URL=http://directus:8055
       - DIRECTUS_URL=http://api.reviews.local:8055
 
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: directus_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1
+    ports:
+      - 5432:5432
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network
 
   nginx-proxy-manager:
     image: 'jc21/nginx-proxy-manager:latest'
@@ -94,6 +106,7 @@ services:
 
 volumes:
   redis_data:
+  postgres_data:
 
 networks:
   app_network:
