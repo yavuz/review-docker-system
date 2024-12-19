@@ -1,1 +1,1 @@
-* * * * * /usr/local/bin/python /app/main.py >> /app/logs/cron.log 2>&1
+# * * * * * /usr/local/bin/python /app/main.py >> /app/logs/cron.log 2>&1

@@ -54,3 +54,6 @@ settings.local.py
 
 # Jupyter Notebook
 .ipynb_checkpoints
+
+# PostgreSQL data directory
+postgres_data/
