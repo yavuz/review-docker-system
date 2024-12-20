@@ -63,9 +63,15 @@ services:
   python-service:
     image: python:3.12-slim
     container_name: python-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import http.client; conn = http.client.HTTPConnection('localhost:8000'); conn.request('GET', '/health'); response = conn.getresponse(); exit(1) if response.status != 200 else exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     working_dir: /app
     build:
-      context: ./python-service  # Dockerfile'ın bulunduğu klasör
+      context: ./python-service
       dockerfile: Dockerfile
     volumes:
       - ./python-service:/app
@@ -77,6 +83,8 @@ services:
     environment:
       - DIRECTUS_SERVER_URL=http://directus:8055
       - DIRECTUS_URL=http://api.reviews.local:8055
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
 
   postgres:
     image: postgres:17
@@ -93,7 +101,13 @@ services:
 
   nginx-proxy-manager:
     image: 'jc21/nginx-proxy-manager:latest'
+    container_name: nginx-proxy-manager
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:81"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     ports:
       - '80:80'
       - '81:81'
@@ -106,8 +120,11 @@ services:
 
 volumes:
   redis_data:
+    name: reviews_redis
   postgres_data:
+    name: reviews_postgres
 
 networks:
   app_network:
+    name: reviews_network
     driver: bridge

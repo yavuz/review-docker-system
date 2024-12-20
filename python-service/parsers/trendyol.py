@@ -306,7 +306,7 @@ async def add_reviews_to_directus(raw_reviews: List[Dict], store_data: Dict):
                     "rating": rating,
                     "review_date": review_date,
                     "review_created_date": review_created_date,
-                    "source": "Trendyol",
+                    "source": STORE_TYPE,
                     "sentiment": sentiment,
                     "status": "published",
                     "store": store_data['id'],
