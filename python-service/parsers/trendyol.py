@@ -3,6 +3,8 @@ import os
 from datetime import datetime
 from typing import List, Dict, Any
 from py_directus import Directus, F
+from subscription_manager import initialize_subscription_limits, update_subscription_usage, SubscriptionLimits
+import json
 
 # Global variables
 STORE_TYPE = 'trendyol'
@@ -57,6 +59,13 @@ def fetch_all_store_data(store_id: str, token_key: str, approved: bool = True, s
     
     while True:
         response = fetch_store_data(store_id, token_key, current_page, approved, size)
+        #print("API Yanıt Yapısı:", json.dumps(response, indent=2, ensure_ascii=False))
+        
+        if 'content' not in response:
+            print("Uyarı: API yanıtında 'content' anahtarı bulunamadı")
+            print("Tam API yanıtı:", response)
+            break
+            
         all_products.extend(response['content'])
         
         if current_page >= response['totalPages'] - 1:
@@ -69,46 +78,68 @@ def fetch_all_store_data(store_id: str, token_key: str, approved: bool = True, s
 def transform_product_for_directus(product: dict, directus_store_id: str) -> dict:
     """
     Trendyol ürün verisini Directus formatına dönüştürür.
-    
-    Args:
-        product (dict): Trendyol'dan gelen ürün verisi
-        directus_store_id (str): Directus'taki mağaza ID'si
-        
-    Returns:
-        dict: Directus formatında ürün verisi
     """
-    # Ana alanları eşleştir
-    directus_product = {
-        "product_id": str(product["productContentId"]),
-        "sku": product["stockCode"],
-        "name": product["title"],
-        "description": product["description"],
-        "price": product["salePrice"],
-        "category": product["categoryName"],
-        "status": "published" if product["approved"] and not product["archived"] else "draft",
-        "sort": None,
-        "store": directus_store_id,
-        "url": product["productUrl"],
-        "images": [img["url"] for img in product["images"]],
-        "store_type": "trendyol",
-        "extra_fields": {}
-    }
-    
-    # Kalan tüm alanları extra_fields'e ekle
-    for key, value in product.items():
-        if key not in ["productCode", "stockCode", "title", "description", "salePrice", 
-                      "categoryName", "approved", "archived", "productUrl", "images"]:
-            directus_product["extra_fields"][key] = value
-            
-    return directus_product
+    # Gelen veriyi kontrol etmek için
+    #print("Ürün Anahtarları:", product.keys())
+    #print("Ürün Verisi:", json.dumps(product, indent=2, ensure_ascii=False))
+
+    try:
+        # Ana alanları eşleştir
+        directus_product = {
+            "product_id": str(product.get('productContentId', '')),
+            "sku": str(product.get("stockCode", '')),
+            "name": product.get("title", ''),
+            "description": product.get("description", ''),
+            "price": float(product.get("salePrice", 0)),
+            "category": product.get("categoryName", ''),
+            "status": "published" if product.get("approved", False) and not product.get("archived", True) else "draft",
+            "sort": None,
+            "store": directus_store_id,
+            "url": product.get("productUrl", ''),
+            "images": [img.get("url", '') for img in product.get("images", [])],
+            "store_type": "trendyol",
+            "extra_fields": {}
+        }
+        
+        # Kalan tüm alanları extra_fields'e ekle
+        for key, value in product.items():
+            if key not in ["productCode", "stockCode", "title", "description", "salePrice", 
+                          "categoryName", "approved", "archived", "productUrl", "images"]:
+                directus_product["extra_fields"][key] = value
+                
+        return directus_product
+        
+    except Exception as e:
+        print(f"Ürün dönüştürme hatası: {str(e)}")
+        print(f"Sorunlu ürün verisi: {product}")
+        raise e
 
 async def parse_store(store_data):
     print(f"Processing Trendyol store: {store_data['name']}")
     api_info = store_data.get('api_connect_info', {})
+    
+    # user_id'yi store_data'dan al
+    user_id = store_data.get('user')
+    if not user_id:
+        print("User ID bulunamadı")
+        return False
+        
+    store_data['user_id'] = user_id
 
     if api_info:
         try:
             print(f"Processing with API credentials: {api_info['store_id']}")
+            
+            # Başlangıçta limitleri al
+            directus = await Directus(os.getenv("DIRECTUS_API_URL"), token=os.getenv("DIRECTUS_API_TOKEN"))
+            subscription_limits, package_info = await initialize_subscription_limits(directus, user_id)
+
+            print(f"Subscription limits: {subscription_limits.product_limit} products, {subscription_limits.review_limit} reviews")
+            
+            
+            if not package_info:
+                print("Paket bilgisi bulunamadı")
+                return False
 
             # Ürünleri çek
             all_products = fetch_all_store_data(
@@ -118,16 +149,19 @@ async def parse_store(store_data):
 
             print(f"Total products fetched: {len(all_products)}")
             
+            
             # Ürünleri Directus formatına dönüştür
             directus_products = [
                 transform_product_for_directus(product, store_data['id']) 
                 for product in all_products
             ]
 
+            #print("Tüm Ürünler:", directus_products)
             print(f"Total products transformed: {len(directus_products)}")
             
+            
             # Ürünleri Directus'a ekle
-            processed_products = await add_products_to_directus(directus_products, store_data)
+            processed_products = await add_products_to_directus(directus_products, store_data, subscription_limits)
             print(f"Total products processed: {len(processed_products)}")
 
             # Yorumları çek ve ekle
@@ -138,7 +172,10 @@ async def parse_store(store_data):
             print(f"Total reviews fetched: {len(raw_reviews)}")
             
             # Yorumları Directus'a ekle
-            await add_reviews_to_directus(raw_reviews, store_data)
+            await add_reviews_to_directus(raw_reviews, store_data, subscription_limits)
+            
+            # İşlem sonunda kullanım istatistiklerini güncelle
+            await update_subscription_usage(directus, user_id, subscription_limits)
             
             return processed_products
 
@@ -214,57 +251,57 @@ def fetch_all_store_reviews(store_id: str, token_key: str, size: int = 1000) -> 
     
     return all_reviews
 
-async def add_products_to_directus(products: List[Dict], store_data: Dict):
+async def add_products_to_directus(products: List[Dict], store_data: Dict, subscription_limits: SubscriptionLimits):
     """
     Ürünleri Directus'a ekler veya günceller
-    
-    Args:
-        products (List[Dict]): Eklenecek ürün listesi
-        store_data (Dict): Mağaza bilgileri
     """
-    directus_api_url = os.getenv("DIRECTUS_API_URL")
-    directus_api_token = os.getenv("DIRECTUS_API_TOKEN")
-    directus = await Directus(directus_api_url, token=directus_api_token)
+    directus = await Directus(os.getenv("DIRECTUS_API_URL"), token=os.getenv("DIRECTUS_API_TOKEN"))
     
     processed_products = []
+
+    print(f"Adding/Updating products in Directus: {len(products)}")
+    
     for product in products:
+        # Limit kontrolü
+        if not subscription_limits.can_add_product():
+            print(f"Ürün limiti aşıldı. Maksimum: {subscription_limits.product_limit}")
+            break
+
         try:
             products_collection = directus.collection('products')
-            
+
             # Ürünün zaten var olup olmadığını kontrol et
             existing_product = await products_collection.filter(
                 (F(sku=product['sku']) & F(store=store_data['id']))
             ).read()
             
+            # User bilgisini ekle
+            product['user'] = store_data.get('user')
+            
             if existing_product.items:
                 # Ürün varsa güncelle
-                product['user'] = store_data.get('user')
                 updated_product = await products_collection.update(existing_product.items[0]['id'], product)
                 processed_products.append(updated_product)
-                print(f"Updated product: {product['name']}")
+                subscription_limits.add_product()  # Sadece yeni eklenen ürünler için sayacı artır
+                print(f"Updated product: {product['extra_fields']['productContentId']}")
             else:
-                # Ürün yoksa yeni ekle
-                product['user'] = store_data.get('user')
+                # Ürün yoksa ve limit uygunsa yeni ekle
                 created_product = await products_collection.create(product)
                 processed_products.append(created_product)
-                print(f"Added new product: {product['name']}")
+                subscription_limits.add_product()  # Sadece yeni eklenen ürünler için sayacı artır
+                print(f"Added new product: {product['extra_fields']['productContentId']}")
+                
         except Exception as e:
-            print(f"Error processing product {product['name']}: {str(e)}")
+            print(f"Ürün işlenirken hata oluştu: {str(e)}")
             continue
     
     return processed_products
 
-async def add_reviews_to_directus(raw_reviews: List[Dict], store_data: Dict):
+async def add_reviews_to_directus(raw_reviews: List[Dict], store_data: Dict, subscription_limits: SubscriptionLimits):
     """
     Yorumları Directus'a ekler
-    
-    Args:
-        raw_reviews (List[Dict]): Eklenecek yorum listesi
-        store_data (Dict): Mağaza bilgileri
     """
-    directus_api_url = os.getenv("DIRECTUS_API_URL")
-    directus_api_token = os.getenv("DIRECTUS_API_TOKEN")
-    directus = await Directus(directus_api_url, token=directus_api_token)
+    directus = await Directus(os.getenv("DIRECTUS_API_URL"), token=os.getenv("DIRECTUS_API_TOKEN"))
     
     reviews_collection = directus.collection('reviews')
     products_collection = directus.collection('products')
@@ -272,6 +309,13 @@ async def add_reviews_to_directus(raw_reviews: List[Dict], store_data: Dict):
     
     for review in raw_reviews:
         try:
+            print("***********************************")
+            print(subscription_limits.can_add_review())
+            # Limit kontrolü
+            if not subscription_limits.can_add_review():
+                print(f"Yorum limiti aşıldı. Maksimum: {subscription_limits.review_limit}")
+                break
+
             # review_target_id'yi oluştur
             review_target_id = f"{store_type}_{review['contentId']}"
             
@@ -279,10 +323,12 @@ async def add_reviews_to_directus(raw_reviews: List[Dict], store_data: Dict):
             existing_review = await reviews_collection.filter(
                 F(review_target_id=review_target_id)
             ).read()
+            
             # Products tablosundan eşleşen ürünü bul
             matching_product = await products_collection.filter(
                 (F(store_type=store_type) & F(product_id=str(review['contentId'])))
             ).read()
+            
             if matching_product.items:
                 product_id = matching_product.items[0]['id']
                 
@@ -299,6 +345,7 @@ async def add_reviews_to_directus(raw_reviews: List[Dict], store_data: Dict):
                     sentiment = 'neutral'
                 else:
                     sentiment = 'negative'
+                    
                 review_data = {
                     "review_target_id": review_target_id,
                     "product": product_id,
@@ -309,20 +356,24 @@ async def add_reviews_to_directus(raw_reviews: List[Dict], store_data: Dict):
                     "source": STORE_TYPE,
                     "sentiment": sentiment,
                     "status": "published",
-                    "store": store_data['id'],
+                    "store_id": store_data['id'],
                     "extra_fields": review,
-                    "user": store_data.get('user')  # Add user data from store
+                    "user": store_data.get('user')
                 }
+                
                 if existing_review.items:
                     # Review varsa güncelle
                     await reviews_collection.update(existing_review.items[0]['id'], review_data)
+                    subscription_limits.add_review()
                     print(f"Updated review: {review_target_id}")
                 else:
                     # Review yoksa yeni ekle
                     await reviews_collection.create(review_data)
                     print(f"Added new review: {review_target_id}")
+                    subscription_limits.add_review()
             else:
                 print(f"Warning: No matching product found for {review_target_id}")
+                
         except Exception as e:
             print(f"Error processing review: {str(e)}")
             continue

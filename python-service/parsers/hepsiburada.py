@@ -6,6 +6,7 @@ import asyncio
 from datetime import datetime
 import os
 from py_directus import Directus, F
+from subscription_manager import initialize_subscription_limits, update_subscription_usage, SubscriptionLimits
 
 # Global variables
 STORE_TYPE = 'hepsiburada'
@@ -13,10 +14,28 @@ STORE_TYPE = 'hepsiburada'
 async def parse_store(store_data: Dict) -> bool:
     try:
         print(f"Hepsiburada mağazası işleniyor: {store_data['name']}")
+        
+        # Başlangıçta limitleri al
+        directus = await Directus(os.getenv("DIRECTUS_API_URL"), token=os.getenv("DIRECTUS_API_TOKEN"))
+        
+        # user_id'yi store_data'dan al
+        user_id = store_data.get('user')
+        if not user_id:
+            print("User ID bulunamadı")
+            await update_import_status(store_data['id'], 'user_id_missing')
+            return False
+            
+        store_data['user_id'] = user_id
+        
+        subscription_limits, package_info = await initialize_subscription_limits(directus, user_id)
+        
+        if not package_info:
+            await update_import_status(store_data['id'], 'subscription_error')
+            return False
+            
         api_info = store_data.get('api_connect_info', {})
         
         if not api_info:
-            # API bilgisi yoksa durumu güncelle
             await update_import_status(store_data['id'], 'api_info_missing')
             return False
             
@@ -32,24 +51,28 @@ async def parse_store(store_data: Dict) -> bool:
         if store_details:
             await update_store_info(directus_store_id, store_details)
         else:
-            # Mağaza detayları alınamazsa durumu güncelle
             await update_import_status(store_data['id'], 'store_details_fetch_failed')
             return False
         
         # Ürünleri çek
-        products_result = await fetch_all_products(store_url, directus_store_id, store_data)
+        products_result = await fetch_all_products(store_url, directus_store_id, store_data, subscription_limits)
+        
         if not products_result:
-            # Ürünler çekilemezse durumu güncelle
             await update_import_status(store_data['id'], 'error_while_fetching_product_info')
             return False
+            
+        # Tüm ürünler için yorumları çek
+        await process_all_reviews(directus_store_id, store_data, subscription_limits)
+
+
+        # İşlem sonunda kullanım istatistiklerini güncelle
+        await update_subscription_usage(directus, user_id, subscription_limits)
         
-        # Başarılı durumda import_status'u güncelle
         await update_import_status(store_data['id'], 'store_reviews_fetched')
         return True
         
     except Exception as e:
         print(f"Hata oluştu: {str(e)}")
-        # Genel hata durumunda import_status'u güncelle
         await update_import_status(store_data['id'], 'error')
         return False
 
@@ -115,7 +138,7 @@ async def update_store_info(store_id: str, store_details: Dict) -> None:
     except Exception as e:
         print(f"Mağaza bilgileri güncellenirken hata: {str(e)}")
 
-async def fetch_all_products(store_url: str, store_id: str, store_data: Dict) -> bool:
+async def fetch_all_products(store_url: str, store_id: str, store_data: Dict, subscription_limits: SubscriptionLimits) -> bool:
     try:
         page = 1
         total_products = None
@@ -138,7 +161,12 @@ async def fetch_all_products(store_url: str, store_id: str, store_data: Dict) ->
                 break
             
             for product in products:
-                await save_product(product, store_id, store_data)
+                # Limit kontrolü
+                if not subscription_limits.can_add_product():
+                    print("Ürün limiti aşıldı, işlem durduruluyor...")
+                    return True
+                    
+                await save_product(product, store_id, store_data, subscription_limits)
                 processed_products += 1
             
             if processed_products >= total_products:
@@ -188,37 +216,49 @@ async def fetch_page_products(store_url: str, page: int) -> Optional[Dict]:
                 html = await response.text()
                 
         soup = BeautifulSoup(html, 'html.parser')
+        save_to_file(html, "html.txt")  # Save raw HTML
         redux_store = soup.find('script', {'id': 'reduxStore'})
+
+        if redux_store:
+            save_to_file(str(redux_store), "redux_store.txt")  # Save redux store content
         
         if not redux_store:
             print("Redux store bulunamadı")
             return None
-            
+
         store_data = json.loads(redux_store.string)
         merchant_search = store_data['merchantState']['merchantSearch']
+
+        # Check if required fields exist
+        if 'totalProductCount' not in merchant_search or 'products' not in merchant_search:
+            print("Required fields missing in merchant_search")
+            return None
         
         return {
             'totalProductCount': merchant_search['totalProductCount'],
             'products': merchant_search['products']
         }
     except Exception as e:
+        print(store_data['merchantState'])
         print(f"Sayfa ürünleri alınırken hata: {str(e)}")
         return None
 
-async def save_product(product: Dict, store_id: str, store_data: Dict) -> None:
+async def save_product(product: Dict, store_id: str, store_data: Dict, subscription_limits: SubscriptionLimits) -> None:
     try:
-        directus_api_url = os.getenv("DIRECTUS_API_URL")
-        directus_api_token = os.getenv("DIRECTUS_API_TOKEN")
-        directus = await Directus(directus_api_url, token=directus_api_token)
-        
+        directus = await Directus(os.getenv("DIRECTUS_API_URL"), token=os.getenv("DIRECTUS_API_TOKEN"))
         products_collection = directus.collection('products')
         
+        # Ürün eklenebilir mi kontrol et
+        if not subscription_limits.can_add_product():
+            print(f"Ürün limiti aşıldı. Maksimum: {subscription_limits.product_limit}")
+            return False
+
         product_data = {
-            'product_id': product['productId'],
-            'sku': product['sku'],
+            'product_id': str(product['productId']),
+            'sku': str(product['sku']),
             'name': product['name'],
-            'description': '',  # TODO: Ürün detay sayfasından açıklama çekilecek
-            'price': product['price'][0]['value'],
+            'description': '',
+            'price': float(product['price'][0]['value']),
             'category': product['categoryName'],
             'store': store_id,
             'user': store_data.get('user'),
@@ -229,9 +269,9 @@ async def save_product(product: Dict, store_id: str, store_data: Dict) -> None:
             'extra_fields': {
                 'brand': product['brandName'],
                 'rating': product['rating'],
-                'merchant_id': product['merchantId'],
+                'merchant_id': str(product['merchantId']),
                 'merchant_name': product['merchantName'],
-                'category_id': product['categoryId']
+                'category_id': str(product['categoryId'])
             }
         }
         
@@ -253,14 +293,8 @@ async def save_product(product: Dict, store_id: str, store_data: Dict) -> None:
             created_product = await products_collection.create(product_data)
             print(f"Yeni ürün eklendi: {product_data['name']}")
         
-        # Ürünün yorumlarını çek
-        print(f"Yorumlar çekiliyor: {product_data['sku']}")
-        await fetch_all_reviews(
-            product_data['sku'],
-            existing_product.items[0]['id'] if existing_product.items else created_product['id'],
-            store_id,
-            store_data
-        )
+        # Başarılı kayıt sonrası sayacı artır
+        subscription_limits.add_product()
             
     except Exception as e:
         print(f"Ürün kaydedilirken hata: {str(e)}")
@@ -293,15 +327,17 @@ async def fetch_product_reviews(sku: str, from_index: int = 0, size: int = 100) 
         print(f"Yorumlar alınırken hata: {str(e)}")
         return None
 
-async def save_reviews(reviews: List[Dict], product_id: str, store_id: str, store_data: Dict):
+async def save_reviews(reviews: List[Dict], product_id: str, store_id: str, store_data: Dict, subscription_limits: SubscriptionLimits):
     try:
-        directus_api_url = os.getenv("DIRECTUS_API_URL")
-        directus_api_token = os.getenv("DIRECTUS_API_TOKEN")
-        directus = await Directus(directus_api_url, token=directus_api_token)
-
-        store_type = STORE_TYPE
+        directus = await Directus(os.getenv("DIRECTUS_API_URL"), token=os.getenv("DIRECTUS_API_TOKEN"))
         
         for review in reviews:
+            # Yorum eklenebilir mi kontrol et
+            if not subscription_limits.can_add_review():
+                subscription_limits.added_reviews = subscription_limits.review_limit
+                print(f"Yorum limiti aşıldı. Maksimum: {subscription_limits.review_limit}")
+                break
+                
             # İçerik kontrolü
             if not review.get('review', {}).get('content'):
                 print("Boş yorum içeriği, atlaniyor...")
@@ -320,7 +356,7 @@ async def save_reviews(reviews: List[Dict], product_id: str, store_id: str, stor
                 
 
             # review_target_id'yi oluştur
-            review_target_id = f"{store_type}_{review['id']}"
+            review_target_id = f"{STORE_TYPE}_{str(review['id'])}"
 
             merchant_name = 'Bilinmiyor'
             if review.get('order') is not None:
@@ -329,18 +365,18 @@ async def save_reviews(reviews: List[Dict], product_id: str, store_id: str, stor
             review_data = {
                 'review_target_id': review_target_id,
                 'content': review['review']['content'],
-                'rating': rating,
+                'rating': float(review['star']),
                 'review_date': review_date.strftime('%Y-%m-%d'),
                 'review_created_date': review_date.isoformat(),
                 'source': 'hepsiburada',
                 'sentiment': sentiment,
                 'product': product_id,
                 'status': 'published',
-                'store': store_id,
+                'store_id': store_id,
                 'user': store_data.get('user'),
                 'extra_fields': {
                     'customer': review['customer'],
-                    'isPurchaseVerified': review['isPurchaseVerified'],
+                    'isPurchaseVerified': bool(review['isPurchaseVerified']),
                     'media': review['media'],
                     'merchant': merchant_name,
                 }
@@ -362,11 +398,13 @@ async def save_reviews(reviews: List[Dict], product_id: str, store_id: str, stor
                 await reviews_collection.create(review_data)
                 print(f"Yeni yorum eklendi: {review_data['review_target_id']}")
 
-    
+            # Başarılı kayıt sonrası sayacı artır
+            subscription_limits.add_review()
+                
     except Exception as e:
         print(f"Yorumlar kaydedilirken hata: {str(e)}")
 
-async def fetch_all_reviews(sku: str, product_id: str, store_id: str, store_data: Dict):
+async def fetch_all_reviews(sku: str, product_id: str, store_id: str, store_data: Dict, subscription_limits: SubscriptionLimits):
     """Tüm yorumları çeken ve kaydeden fonksiyon"""
     from_index = 0
     size = 100
@@ -380,7 +418,7 @@ async def fetch_all_reviews(sku: str, product_id: str, store_id: str, store_data
         if not reviews:
             break
             
-        await save_reviews(reviews, product_id, store_id, store_data)
+        await save_reviews(reviews, product_id, store_id, store_data, subscription_limits)
         
         # Sonraki sayfa kontrolü
         if not response['links'].get('next'):
@@ -389,6 +427,50 @@ async def fetch_all_reviews(sku: str, product_id: str, store_id: str, store_data
         from_index += size
         # Rate limiting
         await asyncio.sleep(1)
+
+async def process_all_reviews(store_id: str, store_data: Dict, subscription_limits: SubscriptionLimits) -> None:
+    """Mağazadaki tüm ürünlerin yorumlarını çeken fonksiyon"""
+    try:
+        print("Tüm ürünlerin yorumları çekiliyor...")
+        directus = await Directus(os.getenv("DIRECTUS_API_URL"), token=os.getenv("DIRECTUS_API_TOKEN"))
+        products_collection = directus.collection('products')
+        
+        # Mağazaya ait tüm ürünleri getir
+        products = await products_collection.filter(
+            F(store=store_id) & F(store_type=STORE_TYPE)
+        ).read()
+        
+        total_products = len(products.items)
+        print(f"Toplam {total_products} ürün için yorumlar çekilecek")
+        
+        for idx, product in enumerate(products.items, 1):
+            # Yorum limiti kontrolü
+            if not subscription_limits.can_add_review():
+                subscription_limits.added_reviews = subscription_limits.review_limit
+                print(f"Yorum limiti aşıldı. Maksimum: {subscription_limits.review_limit}")
+                print("Yorum çekme işlemi sonlandırılıyor...")
+                return
+                
+            print(f"Ürün yorumları çekiliyor ({idx}/{total_products}): {product['name']}")
+            print(store_id)
+
+            # Her ürünün yorumlarını çek
+            await fetch_all_reviews(
+                sku=product['sku'],
+                product_id=product['id'],
+                store_id=store_id,
+                store_data=store_data,
+                subscription_limits=subscription_limits
+            )
+            
+            # Her 5 üründe bir bekleme yap
+            if idx % 5 == 0:
+                await asyncio.sleep(2)
+                
+        print("Tüm ürünlerin yorumları çekildi")
+        
+    except Exception as e:
+        print(f"Yorumlar işlenirken hata: {str(e)}")
 
 async def update_import_status(store_id: str, status: str) -> None:
     try:
@@ -403,3 +485,11 @@ async def update_import_status(store_id: str, status: str) -> None:
         print(f"Import status güncellendi: {status}")
     except Exception as e:
         print(f"Import status güncellenirken hata: {str(e)}")
+
+def save_to_file(content: str, filename: str):
+    """Helper function to save content to file"""
+    try:
+        with open(f"logs/{filename}", "w", encoding="utf-8") as f:
+            f.write(content)
+    except Exception as e:
+        print(f"Error saving to {filename}: {str(e)}")

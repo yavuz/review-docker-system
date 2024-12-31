@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# TODO: Eğer bir mağaza işlemeye başlandıysa o işlem tekrar geldiğinde onu atla
+
 async def process_store(store_data):
     store_type = store_data.get('store_type', '').lower()
     try:
@@ -28,10 +30,9 @@ async def process_store(store_data):
         print("Parser module: ", store_type)
         print("Store data: ", store_data)
         
-        # Call the parse_store function from the parser module to get products
+        # Call the parse_store function from the parser module
         parse_result = await parser_module.parse_store(store_data)
         
-        # Sadece parse_result True ise import_status'u güncelle
         if parse_result:
             await stores_collection.update(store_data['id'], {
                 'import_status': 'store_reviews_fetched'
@@ -47,23 +48,14 @@ async def process_store(store_data):
 
 async def fetch_store_data():
     try:
-        # Directus bağlantısını oluştur
-        directus_api_url = os.getenv("DIRECTUS_API_URL")
-        directus_api_token = os.getenv("DIRECTUS_API_TOKEN")
-        directus = await Directus(directus_api_url, token=directus_api_token)
-
-        # Get stores collection
-        # stores_collection = directus.collection('stores')
-
+        directus = await Directus(os.getenv("DIRECTUS_API_URL"), token=os.getenv("DIRECTUS_API_TOKEN"))
         stores_collection = directus.collection('stores') \
             .filter(F(import_status='product_info_not_fetched')) \
             .limit(10)
-
-        #
-        #.filter(F(id='73')) \
+        
+        #.filter(F(id='79')) \
 
         print("Getting stores...")
-
         stores = await stores_collection.read()
         
         if not stores.items:
