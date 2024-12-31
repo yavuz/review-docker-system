@@ -1,0 +1,4 @@
+e-ticaret websitelerinden belirtilen mağazalardan belirtilen ürünlerini ve yorumlarını çekip bir veritabanında tutan bir proje.
+projem bir python projesi. verileri directus sisteminde tutuyorum. 
+bu verileri çekmek için python ile yazılmış py_directus diye bir paket kullanıyorum. bu paketin dökümantasyonuna buradan ulaşabilirsiniz: https://panos-stavrianos.github.io/py-directus/cheat_sheet/
+directus sistemindeki collectionlardan veri çekip, veri yazıyorum.
