@@ -1,10 +1,12 @@
 import requests
 import os
+import json
+import cloudscraper
 from datetime import datetime
 from typing import List, Dict, Any
 from py_directus import Directus, F
 from subscription_manager import initialize_subscription_limits, update_subscription_usage, SubscriptionLimits
-import json
+from fake_useragent import UserAgent
 
 # Global variables
 STORE_TYPE = 'trendyol'
@@ -198,22 +200,36 @@ def fetch_store_reviews(store_id: str, token_key: str, page: int = 0, size: int 
     Returns:
         dict: API response data with reviews
     """
-    #url = f'https://public.trendyol.com/discovery-sellerstore-webgw-service/v1/ugc/product-reviews/reviews/{store_id}'
-    url = f'https://yavuzyildirim.com/test.json'
-    
-    headers = {
-        'User-Agent': f'{store_id} - Trendyolsoft'
+    ua = UserAgent()
+    scraper = cloudscraper.create_scraper(
+        browser={
+            'browser': 'chrome',
+            'platform': 'windows',
+            'desktop': True
+        }
+    )
+
+    # API çağrısı yapmak için headers ve params
+    url = f'https://apigw.trendyol.com/discovery-sellerstore-webgw-service/v1/ugc/product-reviews/reviews/{store_id}'
+    # API isteği için headers
+    api_headers = {
+        'User-Agent': ua.random,
+        'Accept': 'application/json',
+        'Referer': 'https://www.trendyol.com/',
+        'Origin': 'https://www.trendyol.com',
     }
-    
+
     params = {
         'page': page,
         'size': size,
-        'isMarketplaceMember': 'true'
+        'isMarketplaceMember': 'true',
+        'culture': 'tr-TR',
+        'channelId': 1
     }
-    
-    response = requests.get(url, headers=headers, params=params)
+
+    # Requests ile API çağrısı
+    response = scraper.get(url, headers=api_headers, params=params)
     response.raise_for_status()
-    
     return response.json()
 
 def fetch_all_store_reviews(store_id: str, token_key: str, size: int = 1000) -> List[Dict[str, Any]]:

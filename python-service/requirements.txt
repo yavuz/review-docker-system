@@ -3,3 +3,5 @@ python-dotenv
 py-directus
 aiohttp
 bs4
+fake-useragent
+cloudscraper
