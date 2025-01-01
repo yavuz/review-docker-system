@@ -219,18 +219,46 @@ export default defineEndpoint((router, { services, logger }) => {
                 case 'customer.subscription.deleted':
                     const deletedSubscription = event.data.object as Stripe.Subscription;
                     
+                    await logWebhook(req, event, 'processing');
+
                     const subscriptionServiceForDelete = new ItemsService('subscriptions', {
                         schema: req.schema
                     });
 
+                    // Önce free paketi bul
+                    const packagesServiceForDelete = new ItemsService('packages', {
+                        schema: req.schema
+                    });
+
+                    const freePackage = await packagesServiceForDelete.readByQuery({
+                        filter: { is_free: true },
+                        limit: 1
+                    });
+
+                    const freePackageId = freePackage.length > 0 ? freePackage[0].id : null;
+
+                    // Aboneliği iptal et
                     await subscriptionServiceForDelete.updateByQuery(
                         { filter: { stripe_subscription_id: deletedSubscription.id } },
                         {
                             status: 'cancelled',
                             payment_status: deletedSubscription.status,
-                            end_date: new Date(deletedSubscription.ended_at ? deletedSubscription.ended_at * 1000 : Date.now())
+                            end_date: new Date(deletedSubscription.ended_at ? deletedSubscription.ended_at * 1000 : Date.now()),
+                            package_id: freePackageId
                         }
                     );
+
+                    // Kullanıcının paketini free yap
+                    const userServiceForDelete = new ItemsService('directus_users', {
+                        schema: req.schema
+                    });
+
+                    await userServiceForDelete.updateByQuery(
+                        { filter: { stripe_customer_id: deletedSubscription.customer } },
+                        { package_id: freePackageId }
+                    );
+
+                    await logWebhook(req, event, 'completed');
                     break;
 
                 case 'customer.subscription.created':
@@ -240,7 +268,101 @@ export default defineEndpoint((router, { services, logger }) => {
 
                 case 'customer.subscription.updated':
                     const updatedSubscription = event.data.object as Stripe.Subscription;
-                    // Abonelik güncellemelerini veritabanına yansıt
+                    console.log("------------- Updated Subscription -------------");
+                    console.log(updatedSubscription);
+
+                    await logWebhook(req, event, 'processing');
+
+                    // Önce kullanıcıyı bul
+                    const userUpdatedServiceforID = new ItemsService('directus_users', {
+                        schema: req.schema
+                    });
+
+                    const userData = await userUpdatedServiceforID.readByQuery({
+                        filter: { stripe_customer_id: updatedSubscription.customer },
+                        limit: 1
+                    });
+
+                    if (!userData?.length) {
+                        throw new Error('Kullanıcı bulunamadı');
+                    }
+
+                    const userId = userData[0].id;
+
+                    // Fatura bilgisini al
+                    const latestInvoice = await stripe.invoices.retrieve(updatedSubscription.latest_invoice as string);
+                    const paymentIntentId = latestInvoice.payment_intent as string;
+
+                    // Ödeme kaydı oluştur
+                    const paymentUpdatedService = new ItemsService('payments', {
+                        schema: req.schema
+                    });
+
+                    // Önce aynı ödeme var mı kontrol et
+                    const existingUpdatedPayment = await paymentUpdatedService.readByQuery({
+                        filter: { stripe_payment_id: paymentIntentId },
+                        limit: 1
+                    });
+
+                    let payment_id;
+                    if (!existingUpdatedPayment?.data?.length) {
+
+                        payment_id = await paymentUpdatedService.createOne({
+                            user_id: userId, // Use the actual user ID instead of Stripe customer ID
+                            stripe_payment_id: paymentIntentId,
+                            amount: (updatedSubscription.items.data[0].price.unit_amount || 0) / 100,
+                            currency: updatedSubscription.currency,
+                            status: 'completed',
+                            date_created: new Date(),
+                            metadata: updatedSubscription.metadata
+                        });
+                    } else {
+                        payment_id = existingUpdatedPayment.data[0].id;
+                    }
+
+                    // Paket bilgisini bul
+                    const packagesService = new ItemsService('packages', {
+                        schema: req.schema
+                    });
+
+                    const packageData = await packagesService.readByQuery({
+                        filter: {
+                            _and: [
+                                { stripe_price_id: updatedSubscription.plan.id },
+                                { stripe_product_id: updatedSubscription.plan.product }
+                            ]
+                        }
+                    });
+
+                    const packageId = packageData.length > 0 ? packageData[0].id : null;
+
+                    // Subscription'ı güncelle
+                    const subscriptionService = new ItemsService('subscriptions', {
+                        schema: req.schema
+                    });
+
+                    await subscriptionService.updateByQuery(
+                        { filter: { stripe_subscription_id: updatedSubscription.id } },
+                        {
+                            package_id: packageId,
+                            end_date: new Date(updatedSubscription.current_period_end * 1000),
+                            cancel_at_period_end: updatedSubscription.cancel_at_period_end,
+                            payment_status: updatedSubscription.status,
+                            payment_id: payment_id
+                        }
+                    );
+
+                    // Kullanıcının paket bilgisini güncelle
+                    const userUpdatedService = new ItemsService('directus_users', {
+                        schema: req.schema
+                    });
+
+                    await userUpdatedService.updateByQuery(
+                        { filter: { stripe_customer_id: updatedSubscription.customer } },
+                        { package_id: packageId }
+                    );
+
+                    await logWebhook(req, event, 'completed');
                     break;
 
                 case 'invoice.payment_failed':
